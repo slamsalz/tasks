@@ -53,6 +53,25 @@ export default function App() {
   const arenaRef = useRef<HTMLDivElement>(null);
   const [physics, setPhysics] = useState<Record<string, PhysicsState>>({});
   const requestRef = useRef<number>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Initialize AudioContext on first interaction
+  useEffect(() => {
+    const initAudio = () => {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    };
+    window.addEventListener('click', initAudio);
+    window.addEventListener('touchstart', initAudio);
+    return () => {
+      window.removeEventListener('click', initAudio);
+      window.removeEventListener('touchstart', initAudio);
+    };
+  }, []);
 
   // Star Generator for background
   const stars = useRef<{id: number, left: string, top: string, size: string, duration: string, delay: string}[]>(
@@ -70,6 +89,8 @@ export default function App() {
   useEffect(() => {
     const saved = localStorage.getItem('bubble-timers');
     const savedPersistent = localStorage.getItem('persistent-tasks');
+    const savedPhysics = localStorage.getItem('bubble-physics');
+    
     if (saved) {
       try {
         setTimers(JSON.parse(saved));
@@ -79,6 +100,11 @@ export default function App() {
       try {
         setPersistentTasks(JSON.parse(savedPersistent));
       } catch (e) { console.error('Failed to load persistent tasks'); }
+    }
+    if (savedPhysics) {
+      try {
+        setPhysics(JSON.parse(savedPhysics));
+      } catch (e) { console.error('Failed to load physics'); }
     }
   }, []);
 
@@ -94,7 +120,15 @@ export default function App() {
   // Sound Synthesizer
   const playAlarmSound = useCallback(() => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const audioCtx = audioContextRef.current;
+      
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
       const playSequence = (startTime: number) => {
         [0, 0.3, 0.6].forEach(delay => {
           const osc = audioCtx.createOscillator();
@@ -112,7 +146,6 @@ export default function App() {
         });
       };
       
-      // Play a short pulse sequence
       playSequence(audioCtx.currentTime);
     } catch (e) {
       console.warn('Audio blocked');
@@ -173,7 +206,7 @@ export default function App() {
   const animate = useCallback((time: number) => {
     if (!arenaRef.current) return;
     const { width, height } = arenaRef.current.getBoundingClientRect();
-    const effectiveHeight = height; 
+    if (width === 0 || height === 0) return;
 
     setPhysics(prev => {
       const next = { ...prev };
@@ -187,27 +220,30 @@ export default function App() {
           b.vx = 0;
           b.vy = 0;
         } else {
-          // No damping/anchoring/drift - purely move by current velocity
+          // Subtle ambient drift to prevent static overlaps
+          b.vx += (Math.random() - 0.5) * 0.01;
+          b.vy += (Math.random() - 0.5) * 0.01;
+
           b.x += b.vx;
           b.y += b.vy;
 
           // Sink logic for completed tasks
           const timer = timers.find(t => t.id === id);
           if (timer?.status === 'completed') {
-            b.vy += 0.05; // Sink gravity
+            b.vy += 0.08; // Stronger sink
           }
 
           // Friction/Stop logic
-          b.vx *= 0.8; 
-          b.vy *= 0.8;
+          b.vx *= 0.85; 
+          b.vy *= 0.85;
           if (Math.abs(b.vx) < 0.01) b.vx = 0;
           if (Math.abs(b.vy) < 0.01) b.vy = 0;
         }
       }
 
       // 2. Multi-Pass Rigid Collision Resolution
-      for (let pass = 0; pass < 5; pass++) {
-        // Bubble-to-Bubble Collision (High priority)
+      for (let pass = 0; pass < 8; pass++) { // More passes for stability
+        // Bubble-to-Bubble Collision
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
             const b1 = next[ids[i]];
@@ -215,51 +251,54 @@ export default function App() {
             const dx = b2.x - b1.x;
             const dy = b2.y - b1.y;
             const distSq = dx * dx + dy * dy;
-            const minDist = b1.radius + b2.radius + 25; 
+            const minDist = b1.radius + b2.radius + 30; // Increased spacing buffer
             
             if (distSq < minDist * minDist) {
               const dist = Math.sqrt(distSq) || 0.001;
               const angle = Math.atan2(dy, dx);
               const overlap = (minDist - dist);
               
+              const force = pass === 0 ? 0.5 : 0.2; // Initial push is stronger
+
               if (!b1.isDragging && !b2.isDragging) {
-                const correction = overlap * 0.5;
+                const correction = overlap * force;
                 b1.x -= correction * Math.cos(angle);
                 b1.y -= correction * Math.sin(angle);
                 b2.x += correction * Math.cos(angle);
                 b2.y += correction * Math.sin(angle);
                 
-                // Zero out velocity on collision to prevent bouncing
-                b1.vx = 0;
-                b1.vy = 0;
-                b2.vx = 0;
-                b2.vy = 0;
+                // Transfer some "unsticking" momentum
+                b1.vx -= 0.1 * Math.cos(angle);
+                b1.vy -= 0.1 * Math.sin(angle);
+                b2.vx += 0.1 * Math.cos(angle);
+                b2.vy += 0.1 * Math.sin(angle);
               } else if (b1.isDragging) {
                 b2.x += overlap * Math.cos(angle);
                 b2.y += overlap * Math.sin(angle);
-                b2.vx = 0;
-                b2.vy = 0;
+                b2.vx += 0.2 * Math.cos(angle);
+                b2.vy += 0.2 * Math.sin(angle);
               } else if (b2.isDragging) {
                 b1.x -= overlap * Math.cos(angle);
                 b1.y -= overlap * Math.sin(angle);
-                b1.vx = 0;
-                b1.vy = 0;
+                b1.vx -= 0.2 * Math.cos(angle);
+                b1.vy -= 0.2 * Math.sin(angle);
               }
             }
           }
         }
 
-        // Final Authority: Strict Wall Collisions & Boundary Locking
+        // Final Authority: Strict Wall Collisions
         for (const id of ids) {
           const b = next[id];
-          const TOP_LIMIT = b.radius + 15;
-          const BOTTOM_LIMIT = height - b.radius - 20;
+          const margin = 10;
+          const TOP_LIMIT = b.radius + margin;
+          const BOTTOM_LIMIT = height - b.radius - margin;
 
-          if (b.x < b.radius) { b.x = b.radius; b.vx = Math.max(0, b.vx); }
-          if (b.x > width - b.radius) { b.x = width - b.radius; b.vx = Math.min(0, b.vx); }
+          if (b.x < b.radius + margin) { b.x = b.radius + margin; b.vx = Math.abs(b.vx) * 0.5; }
+          if (b.x > width - b.radius - margin) { b.x = width - b.radius - margin; b.vx = -Math.abs(b.vx) * 0.5; }
           
-          if (b.y < TOP_LIMIT) { b.y = TOP_LIMIT; b.vy = Math.max(0, b.vy); }
-          if (b.y > BOTTOM_LIMIT) { b.y = BOTTOM_LIMIT; b.vy = Math.min(0, b.vy); }
+          if (b.y < TOP_LIMIT) { b.y = TOP_LIMIT; b.vy = Math.abs(b.vy) * 0.5; }
+          if (b.y > BOTTOM_LIMIT) { b.y = BOTTOM_LIMIT; b.vy = -Math.abs(b.vy) * 0.5; }
         }
       }
 
@@ -267,7 +306,7 @@ export default function App() {
     });
 
     requestRef.current = requestAnimationFrame(animate);
-  }, []);
+  }, [timers]);
 
   useEffect(() => {
     requestRef.current = requestAnimationFrame(animate);
@@ -279,27 +318,30 @@ export default function App() {
   // Sync physics objects with timers
   useEffect(() => {
     setPhysics(prev => {
+      let changed = false;
       const next: Record<string, PhysicsState> = {};
+      
       timers.forEach(t => {
         if (prev[t.id]) {
           next[t.id] = prev[t.id];
         } else {
+          changed = true;
           // Spacing-aware initialization
           const width = arenaRef.current?.clientWidth || 800;
           const height = arenaRef.current?.clientHeight || 600;
-          const POND_AREA_TOP = 20; // Minimal top offset
+          const POND_AREA_TOP = 100;
           const POND_AREA_BOTTOM = height - 100; 
 
           let initX = Math.random() * (width * 0.8) + (width * 0.1);
           let initY = Math.random() * (POND_AREA_BOTTOM - POND_AREA_TOP) + POND_AREA_TOP;
 
-          // Simple retry logic to find a non-overlapping spot
-          for (let attempt = 0; attempt < 5; attempt++) {
+          // Retry logic
+          for (let attempt = 0; attempt < 10; attempt++) {
             let collision = false;
             for (const other of Object.values(next)) {
               const dx = other.x - initX;
               const dy = other.y - initY;
-              const combinedRadius = (t.type === 'alarm' ? 60 : 85) + (physics[other.id]?.radius || 85);
+              const combinedRadius = (t.type === 'alarm' ? 60 : 85) + other.radius;
               if (Math.sqrt(dx * dx + dy * dy) < combinedRadius + 50) { 
                 collision = true;
                 break;
@@ -314,17 +356,27 @@ export default function App() {
             id: t.id,
             x: initX,
             y: initY,
-            vx: (Math.random() - 0.5) * 0.05,
-            vy: (Math.random() - 0.5) * 0.05,
+            vx: (Math.random() - 0.5) * 0.1,
+            vy: (Math.random() - 0.5) * 0.1,
             radius: t.type === 'alarm' ? 60 : 85, 
             anchorX: initX,
             anchorY: initY
           };
         }
       });
+
+      // Cleanup physics for deleted timers
+      Object.keys(prev).forEach(id => {
+        if (!timers.find(t => t.id === id)) changed = true;
+      });
+
+      if (changed) {
+        localStorage.setItem('bubble-physics', JSON.stringify(next));
+      }
+
       return next;
     });
-  }, [timers]);
+  }, [timers.map(t => t.id).join(',')]);
 
   const saveTimer = () => {
     if (!newLabel) return;
@@ -706,7 +758,7 @@ export default function App() {
                     setPhysics(prev => {
                       const b = prev[timer.id];
                       if (!b) return prev;
-                      return {
+                      const next = {
                         ...prev,
                         [timer.id]: {
                           ...b,
@@ -715,6 +767,8 @@ export default function App() {
                           anchorY: b.y
                         }
                       };
+                      localStorage.setItem('bubble-physics', JSON.stringify(next));
+                      return next;
                     });
                   }}
                 >
