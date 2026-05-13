@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch: # This adds a manual 'Run workflow' button
 permissions:
   contents: read
   pages: write
@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Upgraded to 20 for better stability
+          node-version: 18
           cache: 'npm'
       - name: Install dependencies
         run: |
