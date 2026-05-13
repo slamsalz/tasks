@@ -227,7 +227,7 @@ export default function App() {
           // Sink logic for completed tasks
           const timer = timers.find(t => t.id === id);
           if (timer?.status === 'completed') {
-            b.vy += 0.08; // Stronger sink
+            b.vy += 0.15; // Stronger sink force
           }
 
           // Friction/Stop logic
@@ -239,7 +239,7 @@ export default function App() {
       }
 
       // 2. Multi-Pass Rigid Collision Resolution
-      for (let pass = 0; pass < 8; pass++) { // More passes for stability
+      for (let pass = 0; pass < 10; pass++) { // Even more passes for bottom-edge stability
         // Bubble-to-Bubble Collision
         for (let i = 0; i < ids.length; i++) {
           for (let j = i + 1; j < ids.length; j++) {
@@ -849,7 +849,6 @@ function Bubble({ timer, onToggle, onDelete, onEdit, isRinging, onSilence }: {
       <div 
         className={cn(
           "flex flex-col items-center justify-center relative p-4 transition-all duration-700 bg-gradient-to-br",
-          timer.status !== 'running' && "backdrop-blur-md",
           isCompleted ? "shadow-[inset_0_0_30px_rgba(255,255,255,0.05)] border-white/20" : "shadow-[inset_0_0_30px_rgba(255,255,255,0.3)] border-white/40",
           theme.from, theme.to,
           isAlarm ? "w-32 h-32 rounded-[2rem] border" : "w-44 h-44 rounded-full border-[2px]",
