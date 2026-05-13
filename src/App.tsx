@@ -220,10 +220,7 @@ export default function App() {
           b.vx = 0;
           b.vy = 0;
         } else {
-          // Subtle ambient drift to prevent static overlaps
-          b.vx += (Math.random() - 0.5) * 0.01;
-          b.vy += (Math.random() - 0.5) * 0.01;
-
+          // No ambient drift as per user request to maintain positions
           b.x += b.vx;
           b.y += b.vy;
 
@@ -851,7 +848,8 @@ function Bubble({ timer, onToggle, onDelete, onEdit, isRinging, onSilence }: {
     >
       <div 
         className={cn(
-          "flex flex-col items-center justify-center relative p-4 backdrop-blur-md transition-all duration-700 bg-gradient-to-br",
+          "flex flex-col items-center justify-center relative p-4 transition-all duration-700 bg-gradient-to-br",
+          timer.status !== 'running' && "backdrop-blur-md",
           isCompleted ? "shadow-[inset_0_0_30px_rgba(255,255,255,0.05)] border-white/20" : "shadow-[inset_0_0_30px_rgba(255,255,255,0.3)] border-white/40",
           theme.from, theme.to,
           isAlarm ? "w-32 h-32 rounded-[2rem] border" : "w-44 h-44 rounded-full border-[2px]",
