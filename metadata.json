@@ -1,0 +1,6 @@
+{
+  "name": "tasks",
+  "description": "An aesthetic task management tool where timers float as bubbles and sink upon completion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
