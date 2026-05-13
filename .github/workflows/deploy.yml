@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: npm install --include=optional
+        run: |
+          npm install --no-package-lock
+          npm install @tailwindcss/oxide-linux-x64-gnu --no-package-lock
       - name: Build
         run: npm run build
         env:
