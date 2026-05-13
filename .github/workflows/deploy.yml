@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch: # Allows manual triggering
 permissions:
   contents: read
   pages: write
@@ -16,10 +17,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20 # Upgraded to 20 for better stability
           cache: 'npm'
       - name: Install dependencies
-        run: npm install
+        run: |
+          rm -f package-lock.json
+          npm install
       - name: Build
         run: npm run build
       - name: Setup Pages
