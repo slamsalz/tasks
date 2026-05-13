@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # This adds a manual 'Run workflow' button
+  workflow_dispatch:
 permissions:
   contents: read
   pages: write
@@ -17,14 +17,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
-          cache: 'npm'
+          node-version: 20
       - name: Install dependencies
         run: |
-          rm -f package-lock.json
-          npm install
+          npm install --no-package-lock
       - name: Build
         run: npm run build
+        env:
+          NODE_ENV: production
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
